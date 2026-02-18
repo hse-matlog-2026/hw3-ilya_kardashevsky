@@ -10,7 +10,6 @@ from typing import AbstractSet, Iterable, Iterator, Mapping, Sequence, Tuple
 
 from propositions.syntax import *
 from propositions.proofs import *
-from itertools import product
 
 #: A model for propositional-logic formulas, a mapping from variable names to
 #: truth values.
@@ -64,30 +63,31 @@ def evaluate(formula: Formula, model: Model) -> bool:
     """
     assert is_model(model)
     assert formula.variables().issubset(variables(model))
-    if is_constant(formula.root):
-        return formula.root == 'T'
+    # Task 2.1
     if is_variable(formula.root):
         return model[formula.root]
+    if is_constant(formula.root):
+        return formula.root == 'T'
     if is_unary(formula.root):
         return not evaluate(formula.first, model)
-    assert is_binary(formula.root)
-    first_value = evaluate(formula.first, model)
-    second_value = evaluate(formula.second, model)
-    if formula.root == '&':
-        return first_value and second_value
-    if formula.root == '|':
-        return first_value or second_value
-    if formula.root == '->':
-        return (not first_value) or second_value
-    if formula.root == '+':
-        return first_value != second_value
-    if formula.root == '<->':
-        return first_value == second_value
-    if formula.root == '-&':
-        return not (first_value and second_value)
-    if formula.root == '-|':
-        return not (first_value or second_value)
-    raise ValueError('Unknown operator: ' + formula.root)
+    if is_binary(formula.root):
+        a = evaluate(formula.first, model)
+        b = evaluate(formula.second, model)
+        if formula.root == '&':
+            return a and b
+        if formula.root == '|':
+            return a or b
+        if formula.root == '->':
+            return (not a) or b
+        if formula.root == '+':
+            return a != b
+        if formula.root == '<->':
+            return a == b
+        if formula.root == '-&':
+            return not (a and b)
+        if formula.root == '-|':
+            return not (a or b)
+    assert False
 
 def all_models(variables: Sequence[str]) -> Iterable[Model]:
     """Calculates all possible models over the given variable names.
@@ -109,8 +109,14 @@ def all_models(variables: Sequence[str]) -> Iterable[Model]:
     """
     for v in variables:
         assert is_variable(v)
-    for values in product([False, True], repeat=len(variables)):
-        yield dict(zip(variables, values))
+    # Task 2.2
+    n = len(variables)
+    for mask in range(2 ** n):
+        model = {}
+        for i in range(n):
+            bit = (mask >> (n - i - 1)) & 1
+            model[variables[i]] = (bit == 1)
+        yield model
 
 def truth_values(formula: Formula, models: Iterable[Model]) -> Iterable[bool]:
     """Calculates the truth value of the given formula in each of the given
@@ -128,6 +134,7 @@ def truth_values(formula: Formula, models: Iterable[Model]) -> Iterable[bool]:
         >>> list(truth_values(Formula.parse('~(p&q76)'), all_models(['p', 'q76'])))
         [True, True, True, False]
     """
+    # Task 2.3
     for model in models:
         yield evaluate(formula, model)
 
@@ -147,23 +154,21 @@ def print_truth_table(formula: Formula) -> None:
         | T | F   | T        |
         | T | T   | F        |
     """
-    variables_sorted = sorted(formula.variables())
-    headers = list(variables_sorted) + [str(formula)]
-    widths = [len(header) for header in headers]
-    for i in range(len(widths)):
-        if widths[i] < 1:
-            widths[i] = 1
+    # Task 2.4
+    vars = sorted(formula.variables())
+    headers = vars + [str(formula)]
+    widths = [len(h) for h in headers]
 
-    def format_row(values: Sequence[str]) -> str:
-        return '|' + '|'.join(' ' + value.ljust(width) + ' '
-                              for value, width in zip(values, widths)) + '|'
+    def format(cells: Sequence[str]) -> str:
+        return '| ' + ' | '.join(cells[i].ljust(widths[i]) for i in range(len(cells))) + ' |'
 
-    print(format_row(headers))
-    print('|' + '|'.join('-' * (width + 2) for width in widths) + '|')
-    for model in all_models(variables_sorted):
-        values = [('T' if model[var] else 'F') for var in variables_sorted]
+    print(format(headers))
+    print('|' + '|'.join('-' * (w + 2) for w in widths) + '|')
+
+    for model in all_models(vars):
+        values = [('T' if model[v] else 'F') for v in vars]
         values.append('T' if evaluate(formula, model) else 'F')
-        print(format_row(values))
+        print(format(values))
 
 def is_tautology(formula: Formula) -> bool:
     """Checks if the given formula is a tautology.
@@ -174,7 +179,12 @@ def is_tautology(formula: Formula) -> bool:
     Returns:
         ``True`` if the given formula is a tautology, ``False`` otherwise.
     """
-    return all(truth_values(formula, all_models(sorted(formula.variables()))))
+    # Task 2.5a
+    vars = sorted(formula.variables())
+    for model in all_models(vars):
+        if not evaluate(formula, model):
+            return False
+    return True
 
 def is_contradiction(formula: Formula) -> bool:
     """Checks if the given formula is a contradiction.
@@ -185,8 +195,12 @@ def is_contradiction(formula: Formula) -> bool:
     Returns:
         ``True`` if the given formula is a contradiction, ``False`` otherwise.
     """
-    return not any(truth_values(formula,
-                                all_models(sorted(formula.variables()))))
+    # Task 2.5b
+    vars = sorted(formula.variables())
+    for model in all_models(vars):
+        if evaluate(formula, model):
+            return False
+    return True
 
 def is_satisfiable(formula: Formula) -> bool:
     """Checks if the given formula is satisfiable.
@@ -197,7 +211,12 @@ def is_satisfiable(formula: Formula) -> bool:
     Returns:
         ``True`` if the given formula is satisfiable, ``False`` otherwise.
     """
-    return any(truth_values(formula, all_models(sorted(formula.variables()))))
+    # Task 2.5c
+    vars = sorted(formula.variables())
+    for model in all_models(vars):
+        if evaluate(formula, model):
+            return True
+    return False
 
 def _synthesize_for_model(model: Model) -> Formula:
     """Synthesizes a propositional formula in the form of a single conjunctive
@@ -213,16 +232,21 @@ def _synthesize_for_model(model: Model) -> Formula:
     """
     assert is_model(model)
     assert len(model.keys()) > 0
+    # Task 2.6
+    vars = sorted(model.keys())
     literals = []
-    for variable in sorted(model.keys()):
-        if model[variable]:
-            literals.append(Formula(variable))
+
+    for v in vars:
+        if model[v]:
+            literals.append(Formula(v))
         else:
-            literals.append(Formula('~', Formula(variable)))
-    formula = literals[0]
-    for literal in literals[1:]:
-        formula = Formula('&', formula, literal)
-    return formula
+            literals.append(Formula('~', Formula(v)))
+
+    clause = literals[0]
+    for lit in literals[1:]:
+        clause = Formula('&', clause, lit)
+
+    return clause
 
 def synthesize(variables: Sequence[str], values: Iterable[bool]) -> Formula:
     """Synthesizes a propositional formula in DNF over the given variable names,
@@ -247,18 +271,22 @@ def synthesize(variables: Sequence[str], values: Iterable[bool]) -> Formula:
         False
     """
     assert len(variables) > 0
-    models = list(all_models(variables))
-    clauses = []
-    for model, value in zip(models, values):
-        if value:
-            clauses.append(_synthesize_for_model(model))
-    if not clauses:
-        first_var = variables[0]
-        return Formula('&', Formula(first_var),
-                       Formula('~', Formula(first_var)))
-    formula = clauses[0]
-    for clause in clauses[1:]:
-        formula = Formula('|', formula, clause)
+    # Task 2.7
+    models = all_models(list(variables))
+    disjuncts = []
+
+    for model, val in zip(models, values):
+        if val:
+            disjuncts.append(_synthesize_for_model(model))
+
+    if not disjuncts:
+        v = variables[0]
+        return Formula('&', Formula(v), Formula('~', Formula(v)))
+
+    formula = disjuncts[0]
+    for d in disjuncts[1:]:
+        formula = Formula('|', formula, d)
+
     return formula
 
 def _synthesize_for_all_except_model(model: Model) -> Formula:
@@ -275,16 +303,7 @@ def _synthesize_for_all_except_model(model: Model) -> Formula:
     """
     assert is_model(model)
     assert len(model.keys()) > 0
-    literals = []
-    for variable in sorted(model.keys()):
-        if model[variable]:
-            literals.append(Formula('~', Formula(variable)))
-        else:
-            literals.append(Formula(variable))
-    formula = literals[0]
-    for literal in literals[1:]:
-        formula = Formula('|', formula, literal)
-    return formula
+    # Optional Task 2.8
 
 def synthesize_cnf(variables: Sequence[str], values: Iterable[bool]) -> Formula:
     """Synthesizes a propositional formula in CNF over the given variable names,
@@ -309,19 +328,7 @@ def synthesize_cnf(variables: Sequence[str], values: Iterable[bool]) -> Formula:
         False
     """
     assert len(variables) > 0
-    models = list(all_models(variables))
-    clauses = []
-    for model, value in zip(models, values):
-        if not value:
-            clauses.append(_synthesize_for_all_except_model(model))
-    if not clauses:
-        first_var = variables[0]
-        return Formula('|', Formula(first_var),
-                       Formula('~', Formula(first_var)))
-    formula = clauses[0]
-    for clause in clauses[1:]:
-        formula = Formula('&', formula, clause)
-    return formula
+    # Optional Task 2.9
 
 def evaluate_inference(rule: InferenceRule, model: Model) -> bool:
     """Checks if the given inference rule holds in the given model.
